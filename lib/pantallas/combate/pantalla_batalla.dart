@@ -109,7 +109,7 @@ class _PantallaBatallaState extends State<PantallaBatalla>
             _textoEnCurso =
                 '${nombreCombatiente(evento.atacante)} usó ${evento.movimiento.nombre}.';
           });
-          await _pausaDialogo(const Duration(milliseconds: 340));
+          await _pausaDialogo(const Duration(milliseconds: 540));
           if (!mounted) return;
           if (!reducirMovimiento && evento.acerto && evento.efectividad > 0) {
             setState(() => _ataqueEnEscena = evento);
@@ -126,7 +126,7 @@ class _PantallaBatallaState extends State<PantallaBatalla>
         });
         if (evento is! CombateFinalizado) {
           await _pausaDialogo(
-            Duration(milliseconds: evento is AtaqueResuelto ? 280 : 420),
+            Duration(milliseconds: evento is AtaqueResuelto ? 850 : 420),
           );
           if (!mounted) return;
         }
