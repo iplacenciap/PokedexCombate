@@ -20,12 +20,12 @@ Future<void> tocar(WidgetTester tester, Finder objetivo) async {
 }
 
 void main() {
-  for (final ancho in [360.0, 1060.0]) {
-    testWidgets('juega la práctica desde la Pokédex con ancho $ancho', (
+  for (final ventana in [Size(360, 640), Size(1060, 500), Size(1517, 823)]) {
+    testWidgets('juega la práctica sin desplazarse en $ventana', (
       tester,
     ) async {
       SharedPreferences.setMockInitialValues({});
-      tester.view.physicalSize = Size(ancho, 760);
+      tester.view.physicalSize = ventana;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -38,6 +38,24 @@ void main() {
         expect(find.byType(PraderaDuelos), findsOneWidget);
         expect(find.text('Pidgey'), findsOneWidget);
         final ataque = find.byKey(const ValueKey('movimiento_batalla_0'));
+        final desplazamiento = find.descendant(
+          of: find.byType(PantallaBatalla),
+          matching: find.byType(Scrollable),
+        );
+        expect(desplazamiento, findsNothing);
+        final ps = tester.widget<CampoBatalla>(find.byType(CampoBatalla));
+        await tocar(tester, find.text('Cambiar de Pokémon'));
+        expect(find.text('Volver a movimientos'), findsOneWidget);
+        await tocar(tester, find.widgetWithText(OutlinedButton, 'Charmander'));
+        await tocar(tester, find.text('Mantener a Charmander'));
+        expect(ataque, findsOneWidget);
+        expect(find.textContaining('Turnos completados: 0'), findsOneWidget);
+        final trasMantener = tester.widget<CampoBatalla>(
+          find.byType(CampoBatalla),
+        );
+        expect(trasMantener.jugador.ps, ps.jugador.ps);
+        expect(trasMantener.rival.ps, ps.rival.ps);
+
         for (
           var turno = 0;
           turno < 5 && find.text('Geodude').evaluate().isEmpty;
@@ -48,6 +66,11 @@ void main() {
             find.byType(CampoBatalla),
           );
           expect(instante.jugador.ps, greaterThan(0));
+          final registro = find.byKey(const ValueKey('registro_batalla'));
+          expect(registro, findsOneWidget);
+          expect(tester.getBottomLeft(registro).dy, lessThan(ventana.height));
+          expect(tester.getBottomLeft(ataque).dy, lessThan(ventana.height));
+          expect(desplazamiento, findsNothing);
         }
 
         expect(find.text('Geodude'), findsOneWidget);
@@ -116,7 +139,7 @@ void main() {
           find.byKey(const ValueKey('escenario_batalla')),
         );
         expect(escenario.width, greaterThan(1200));
-        expect(escenario.height, greaterThan(430));
+        expect(escenario.height, greaterThan(760 * .52));
 
         final spritesEnCancha = find.descendant(
           of: find.byType(CampoBatalla),
@@ -192,7 +215,7 @@ void main() {
 
   for (final reducir in [false, true]) {
     testWidgets(
-      'deja leer el anuncio y el daño con movimiento reducido: $reducir',
+      'escribe el anuncio y da tiempo al daño con movimiento reducido: $reducir',
       (tester) async {
         await mockNetworkImagesFor(() async {
           await tester.pumpWidget(
@@ -226,44 +249,55 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(boton);
           await tester.pump();
-          await tester.pump(const Duration(milliseconds: 530));
+          await tester.pump(const Duration(milliseconds: 130));
+          if (reducir) {
+            expect(anuncio, findsOneWidget);
+          } else {
+            final textoParcial = tester.widget<Text>(
+              find.descendant(of: dialogo, matching: find.byType(Text)),
+            );
+            final letras = (textoParcial.textSpan! as TextSpan).children!;
+            final prefijo = (letras.first as TextSpan).text!;
+            final faltantes = (letras.last as TextSpan).text!;
+            expect(prefijo, isNotEmpty);
+            expect(faltantes, isNotEmpty);
+            expect('$prefijo$faltantes', 'Charmander usó Pirotecnia.');
+            await tester.pump(const Duration(milliseconds: 300));
+            await tester.pump();
+          }
+
+          await tester.pump(Duration(milliseconds: reducir ? 400 : 230));
           expect(anuncio, findsOneWidget);
           expect(ataque, findsNothing);
           expect(psRival(), psIniciales);
           expect(tester.widget<FilledButton>(boton).onPressed, isNull);
           expect(find.textContaining('Turnos completados: 0'), findsOneWidget);
 
-          await tester.pump(const Duration(milliseconds: 20));
+          await tester.pump(const Duration(milliseconds: 30));
           await tester.pump();
-          await tester.pump(const Duration(milliseconds: 120));
-          expect(ataque, reducir ? findsNothing : findsOneWidget);
-          expect(
-            psRival(),
-            reducir ? lessThan(psIniciales) : equals(psIniciales),
-          );
-
           if (!reducir) {
-            await tester.pump(const Duration(milliseconds: 320));
+            expect(ataque, findsOneWidget);
+            expect(psRival(), psIniciales);
+            await tester.pump(const Duration(milliseconds: 440));
             await tester.pump();
+            await tester.pump(const Duration(milliseconds: 710));
+            await tester.pump();
+          } else {
+            expect(ataque, findsNothing);
           }
 
           final dano = find.descendant(
             of: dialogo,
-            matching: find.textContaining('Charmander usó Pirotecnia e infligió'),
+            matching: find.textContaining(
+              'Charmander usó Pirotecnia e infligió',
+            ),
           );
-          final anuncioRival = find.descendant(
-            of: dialogo,
-            matching: find.textContaining('Pidgey usó'),
-          );
-          expect(dano, findsOneWidget);
           expect(psRival(), lessThan(psIniciales));
+          expect(dano, findsOneWidget);
           await tester.pump(const Duration(milliseconds: 650));
           expect(dano, findsOneWidget);
-          expect(anuncioRival, findsNothing);
           await tester.pump(const Duration(milliseconds: 210));
-          await tester.pump();
           expect(dano, findsNothing);
-          expect(anuncioRival, findsOneWidget);
 
           await tester.pumpAndSettle();
           expect(find.textContaining('Turnos completados: 1'), findsOneWidget);

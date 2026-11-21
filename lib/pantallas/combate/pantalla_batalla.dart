@@ -48,6 +48,7 @@ class _PantallaBatallaState extends State<PantallaBatalla>
   final _bajasEnEscena = <BandoCombate, Set<int>>{};
   AtaqueResuelto? _ataqueEnEscena;
   String? _textoEnCurso;
+  List<String>? _letrasEnCurso;
   bool _mostrarEquipo = false;
   int? _reservaSeleccionada;
   bool get _animando => _visibles != null;
@@ -105,11 +106,14 @@ class _PantallaBatallaState extends State<PantallaBatalla>
     try {
       for (final evento in eventos) {
         if (evento is AtaqueResuelto) {
-          setState(() {
-            _textoEnCurso =
-                '${nombreCombatiente(evento.atacante)} usó ${evento.movimiento.nombre}.';
-          });
-          await _pausaDialogo(const Duration(milliseconds: 540));
+          await _escribirDialogo(
+            '${nombreCombatiente(evento.atacante)} usó ${evento.movimiento.nombre}.',
+            reducirMovimiento: reducirMovimiento,
+          );
+          if (!mounted) return;
+          await _pausaDialogo(
+            Duration(milliseconds: reducirMovimiento ? 540 : 250),
+          );
           if (!mounted) return;
           if (!reducirMovimiento && evento.acerto && evento.efectividad > 0) {
             setState(() => _ataqueEnEscena = evento);
@@ -122,8 +126,12 @@ class _PantallaBatallaState extends State<PantallaBatalla>
           _ataqueEnEscena = null;
           _aplicarEventoVisual(evento);
           _eventos.add(evento);
-          _textoEnCurso = _mensaje(evento);
         });
+        await _escribirDialogo(
+          _mensaje(evento),
+          reducirMovimiento: reducirMovimiento,
+        );
+        if (!mounted) return;
         if (evento is! CombateFinalizado) {
           await _pausaDialogo(
             Duration(milliseconds: evento is AtaqueResuelto ? 850 : 420),
@@ -145,6 +153,23 @@ class _PantallaBatallaState extends State<PantallaBatalla>
       _textoEnCurso = null;
       _eventos = eventos;
     });
+  }
+
+  Future<void> _escribirDialogo(
+    String texto, {
+    required bool reducirMovimiento,
+  }) async {
+    final letras = reducirMovimiento ? null : texto.characters.toList();
+    setState(() {
+      _textoEnCurso = texto;
+      _letrasEnCurso = letras;
+    });
+    if (letras == null || letras.isEmpty) return;
+
+    await _pausaDialogo(
+      Duration(milliseconds: (letras.length * 16).clamp(80, 700)),
+    );
+    if (mounted) setState(() => _letrasEnCurso = null);
   }
 
   Future<void> _pausaDialogo(Duration duracion) {
@@ -259,12 +284,36 @@ class _PantallaBatallaState extends State<PantallaBatalla>
         constraints: const BoxConstraints(minHeight: 56),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 9),
-          child: Semantics(
-            liveRegion: true,
-            child: Text(texto, style: TemaBatalla.letra(19, fuerte: true)),
-          ),
+          child: Semantics(liveRegion: true, child: _textoDialogo(texto)),
         ),
       ),
+    );
+  }
+
+  Widget _textoDialogo(String texto) {
+    final estilo = TemaBatalla.letra(19, fuerte: true);
+    final letras = _letrasEnCurso;
+    if (letras == null) return Text(texto, style: estilo);
+
+    return AnimatedBuilder(
+      animation: _animacion,
+      builder: (context, child) {
+        final visibles = (_animacion.value * letras.length).floor();
+        return ExcludeSemantics(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: letras.take(visibles).join()),
+                TextSpan(
+                  text: letras.skip(visibles).join(),
+                  style: const TextStyle(color: Colors.transparent),
+                ),
+              ],
+            ),
+            style: estilo,
+          ),
+        );
+      },
     );
   }
 
@@ -289,9 +338,7 @@ class _PantallaBatallaState extends State<PantallaBatalla>
               : _eventos.where((evento) => evento != aviso);
           final jugador = _visible(BandoCombate.jugador);
           final rival = _visible(BandoCombate.rival);
-          final alturaEscenario = (limites.maxHeight - (compacto ? 362 : 276))
-              .clamp(compacto ? 300.0 : 270.0, double.infinity);
-          return SingleChildScrollView(
+          return Padding(
             padding: EdgeInsets.fromLTRB(lateral, 9, lateral, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -317,40 +364,58 @@ class _PantallaBatallaState extends State<PantallaBatalla>
                   ],
                 ),
                 const SizedBox(height: 9),
-                MarcoBatalla(
-                  fondo: TemaBatalla.metal,
-                  padding: const EdgeInsets.all(3),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SizedBox(
-                        key: const ValueKey('escenario_batalla'),
-                        height: alturaEscenario,
-                        child: CampoBatalla(
-                          jugador: jugador,
-                          rival: rival,
-                          equipoJugador: _equipoVisible(
-                            BandoCombate.jugador,
-                            jugador,
+                Expanded(
+                  child: MarcoBatalla(
+                    fondo: TemaBatalla.metal,
+                    padding: const EdgeInsets.all(3),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          key: const ValueKey('escenario_batalla'),
+                          child: CampoBatalla(
+                            jugador: jugador,
+                            rival: rival,
+                            equipoJugador: _equipoVisible(
+                              BandoCombate.jugador,
+                              jugador,
+                            ),
+                            equipoRival: _equipoVisible(
+                              BandoCombate.rival,
+                              rival,
+                            ),
+                            animacion: _animacion,
+                            ataque: _ataqueEnEscena,
                           ),
-                          equipoRival: _equipoVisible(
-                            BandoCombate.rival,
-                            rival,
-                          ),
-                          animacion: _animacion,
-                          ataque: _ataqueEnEscena,
                         ),
-                      ),
-                      _cuadroDialogo(aviso, jugador),
-                    ],
+                        _cuadroDialogo(aviso, jugador),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
-                _controles(),
-                if (historial.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  _registro(historial),
-                ],
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: limites.maxHeight * .62,
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.bottomCenter,
+                    child: SizedBox(
+                      width: limites.maxWidth - lateral * 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _controles(),
+                          if (historial.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            _registro(historial),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           );
@@ -360,6 +425,7 @@ class _PantallaBatallaState extends State<PantallaBatalla>
   );
 
   Widget _registro(Iterable<EventoCombate> historial) => MarcoBatalla(
+    key: const ValueKey('registro_batalla'),
     fondo: TemaBatalla.hundido,
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
     child: Semantics(
@@ -473,7 +539,7 @@ class _PantallaBatallaState extends State<PantallaBatalla>
           const SizedBox(height: 7),
           FilaAccionesBatalla(
             key: ValueKey(jugador.indiceActivo),
-            anchoMinimo: 150,
+            anchoMinimo: MediaQuery.sizeOf(context).width < 580 ? 92 : 150,
             tarjetas: [
               for (final (i, ataque)
                   in jugador.activo.pokemon.movimientos.indexed)
@@ -485,10 +551,21 @@ class _PantallaBatallaState extends State<PantallaBatalla>
     );
   }
 
+  void _volverAMovimientos() {
+    setState(() {
+      _mostrarEquipo = false;
+      _reservaSeleccionada = null;
+    });
+  }
+
   Widget _selectorEquipo(bool obligatorio) {
     final equipo = _estado.jugador;
-    final disponibles = equipo.reservasDisponibles.toSet();
+    final disponibles = {
+      ...equipo.reservasDisponibles,
+      if (!obligatorio) equipo.indiceActivo,
+    };
     final indice = _reservaSeleccionada;
+    final mantenerActivo = !obligatorio && indice == equipo.indiceActivo;
     return MarcoBatalla(
       padding: const EdgeInsets.fromLTRB(12, 7, 12, 12),
       child: Column(
@@ -515,16 +592,15 @@ class _PantallaBatallaState extends State<PantallaBatalla>
               if (!obligatorio)
                 TextButton(
                   style: TemaBatalla.boton(acento: TemaBatalla.metal),
-                  onPressed: () => setState(() {
-                    _mostrarEquipo = false;
-                    _reservaSeleccionada = null;
-                  }),
+                  onPressed: _volverAMovimientos,
                   child: const Text('Volver a movimientos'),
                 ),
               FilledButton.icon(
                 key: const ValueKey('enviar_reserva_batalla'),
                 onPressed: indice == null || !disponibles.contains(indice)
                     ? null
+                    : mantenerActivo
+                    ? _volverAMovimientos
                     : () => obligatorio
                           ? _sustituir(indice)
                           : _aplicar(Cambiar(indice)),
@@ -533,7 +609,8 @@ class _PantallaBatallaState extends State<PantallaBatalla>
                 label: Text(
                   indice == null
                       ? 'Enviar al combate'
-                      : 'Enviar a ${nombreCombatiente(equipo.integrantes[indice].pokemon)}',
+                      : '${mantenerActivo ? 'Mantener' : 'Enviar'} a '
+                            '${nombreCombatiente(equipo.integrantes[indice].pokemon)}',
                 ),
               ),
             ],

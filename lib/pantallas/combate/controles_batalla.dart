@@ -1,6 +1,3 @@
-import 'dart:math' as math;
-import 'dart:ui' show PointerDeviceKind;
-
 import 'package:flutter/material.dart';
 import 'package:proyecto_pokedex/logica/combate/motor_combate.dart';
 import 'package:proyecto_pokedex/logica/combate/movimiento_ataque.dart';
@@ -24,29 +21,20 @@ class FilaAccionesBatalla extends StatelessWidget {
     builder: (context, limites) {
       const separacion = 10.0;
       final cantidad = tarjetas.length;
-      final ancho = math.max(
-        anchoMinimo * MediaQuery.textScalerOf(context).scale(1).clamp(1, 1.4),
-        (limites.maxWidth - separacion * (cantidad - 1)) / cantidad,
-      );
-      final comportamiento = ScrollConfiguration.of(context);
-      return ScrollConfiguration(
-        behavior: comportamiento.copyWith(
-          dragDevices: {...comportamiento.dragDevices, PointerDeviceKind.mouse},
-        ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final (i, tarjeta) in tarjetas.indexed) ...[
-                  if (i > 0) const SizedBox(width: separacion),
-                  SizedBox(width: ancho, child: tarjeta),
-                ],
-              ],
-            ),
-          ),
-        ),
+      if (cantidad == 0) return const SizedBox.shrink();
+      final minimo =
+          anchoMinimo * MediaQuery.textScalerOf(context).scale(1).clamp(1, 1.4);
+      final porFila = ((limites.maxWidth + separacion) / (minimo + separacion))
+          .floor()
+          .clamp(1, cantidad);
+      final ancho = (limites.maxWidth - separacion * (porFila - 1)) / porFila;
+      return Wrap(
+        spacing: separacion,
+        runSpacing: separacion,
+        children: [
+          for (final tarjeta in tarjetas)
+            SizedBox(width: ancho, child: tarjeta),
+        ],
       );
     },
   );
@@ -70,6 +58,7 @@ class TarjetaMovimientoBatalla extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compacto = MediaQuery.sizeOf(context).width < 580;
     final color = TemaBatalla.colorTipo(movimiento.tipo);
     return FilledButton(
       key: claveBoton,
@@ -77,18 +66,23 @@ class TarjetaMovimientoBatalla extends StatelessWidget {
       style: TemaBatalla.boton(acento: color, fondo: TemaBatalla.hundido)
           .copyWith(
             alignment: Alignment.topLeft,
-            padding: const WidgetStatePropertyAll(
-              EdgeInsets.fromLTRB(12, 10, 12, 10),
+            padding: WidgetStatePropertyAll(
+              compacto
+                  ? const EdgeInsets.symmetric(horizontal: 7, vertical: 6)
+                  : const EdgeInsets.fromLTRB(12, 10, 12, 10),
             ),
           ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(movimiento.nombre, style: TemaBatalla.letra(20, fuerte: true)),
-          const SizedBox(height: 8),
+          Text(
+            movimiento.nombre,
+            style: TemaBatalla.letra(compacto ? 15 : 20, fuerte: true),
+          ),
+          SizedBox(height: compacto ? 4 : 8),
           Wrap(
-            spacing: 8,
+            spacing: compacto ? 4 : 8,
             runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             alignment: WrapAlignment.spaceBetween,
@@ -100,7 +94,7 @@ class TarjetaMovimientoBatalla extends StatelessWidget {
               Text(
                 '$pp / ${movimiento.ppMaximos} PP',
                 style: TemaBatalla.letra(
-                  16,
+                  compacto ? 12 : 16,
                   color: pp == 0 ? TemaBatalla.alerta : TemaBatalla.texto,
                   espaciado: .3,
                 ),
@@ -111,7 +105,10 @@ class TarjetaMovimientoBatalla extends StatelessWidget {
             const SizedBox(height: 5),
             Text(
               detalle,
-              style: TemaBatalla.letra(13, color: TemaBatalla.suave),
+              style: TemaBatalla.letra(
+                compacto ? 11 : 13,
+                color: TemaBatalla.suave,
+              ),
             ),
           ],
         ],

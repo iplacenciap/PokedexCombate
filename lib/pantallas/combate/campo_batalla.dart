@@ -147,7 +147,7 @@ class _HudCombatiente extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: TemaBatalla.letra(
-              23,
+              MediaQuery.sizeOf(context).width < 580 ? 18 : 23,
               fuerte: true,
             ).copyWith(shadows: sombras),
           ),
